@@ -3,11 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Khifa Helios — Selected Works</title>
-    <meta name="description" content="Khifa Helios — an interactive 3D card gallery of selected works. Scroll-driven motion across Flat, Tilt, Ring, and Gallery layouts, set against a cinematic near-black space." />
-    <meta name="author" content="Khifa Helios" />
-    <meta property="og:title" content="Khifa Helios — Selected Works" />
-    <meta property="og:description" content="An interactive 3D card gallery of selected works — scroll-driven motion, cinematic dark space." />
+    <title>Jelajah Wisata Indonesia</title>
+    <meta name="description" content="Jelajah Wisata Indonesia — galeri 3D bertingkat: pilih provinsi, telusuri destinasinya, lalu nikmati galeri fotonya, di atas ruang gelap sinematik." />
+    <meta name="author" content="Jelajah Wisata Indonesia" />
+    <meta property="og:title" content="Jelajah Wisata Indonesia" />
+    <meta property="og:description" content="Galeri 3D wisata Indonesia bertingkat — provinsi, destinasi, dan galeri foto dengan gerak sinematik." />
     <meta property="og:type" content="website" />
     <link rel="stylesheet" href="/style.css" />
   </head>
@@ -15,38 +15,26 @@
     <canvas id="scene"></canvas>
     <div class="vignette" aria-hidden="true"></div>
 
-    <header class="chrome chrome-tl">Khifa Helios — Selected Works</header>
+    <header class="chrome chrome-tl">Jelajah Wisata Indonesia</header>
 
-    <nav class="chrome chrome-tr" id="seg" aria-label="Layout mode">
-      <div id="seg-pill" aria-hidden="true"></div>
-      <button type="button" data-mode="flat" data-hot class="active">Flat</button>
-      <button type="button" data-mode="tilt" data-hot>Tilt</button>
-      <button type="button" data-mode="ring" data-hot>Ring</button>
-      <button type="button" data-mode="gallery" data-hot>Grid</button>
-      <button type="button" data-mode="helix" data-hot>Helix</button>
-      <button type="button" data-mode="phyllo" data-hot>Petal</button>
-      <button type="button" data-mode="mobius" data-hot>M&ouml;bius</button>
-    </nav>
+    <nav class="chrome chrome-tr" id="crumbs" aria-label="Breadcrumb"></nav>
+
+    <button type="button" class="chrome chrome-rc" id="back" data-hot aria-label="Kembali" hidden>
+      <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M9 2 4 7l5 5"></path>
+      </svg>
+      <span>Kembali</span>
+    </button>
 
     <div class="chrome chrome-bl">
-      <span class="logo" aria-hidden="true">K</span>
+      <span class="logo" aria-hidden="true">ID</span>
       <span class="hint">Scroll to explore</span>
     </div>
 
     <div class="chrome chrome-br" aria-label="Card counter">
       <span class="counter-wrap"><span id="counter-num">01</span></span>
-      <span class="counter-rest">&nbsp;—&nbsp;18</span>
+      <span class="counter-rest">&nbsp;—&nbsp;11</span>
     </div>
-
-    <button type="button" class="chrome chrome-rc" id="filter-btn" data-hot aria-label="Filters">
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round">
-        <line x1="1" y1="3.5" x2="13" y2="3.5"></line>
-        <circle cx="9" cy="3.5" r="1.6" fill="#0a0a0c"></circle>
-        <line x1="1" y1="10.5" x2="13" y2="10.5"></line>
-        <circle cx="5" cy="10.5" r="1.6" fill="#0a0a0c"></circle>
-      </svg>
-    </button>
-    <div id="filter-panel" aria-hidden="true" aria-label="Filter by discipline"></div>
 
     <div id="detail" aria-hidden="true">
       <button type="button" id="detail-close" data-hot aria-label="Close">&times;</button>
@@ -60,7 +48,7 @@
       </div>
     </div>
 
-    <div id="loader"><span id="loader-text">Loading 0 / 18</span></div>
+    <div id="loader"><span id="loader-text">Loading 0 / 11</span></div>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

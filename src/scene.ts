@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { TessellateModifier } from 'three/examples/jsm/modifiers/TessellateModifier.js'
 import { addBend, type BendUniform } from './bend'
-import type { CardItem } from './data'
+import { MAX_CARDS, type CardItem, type Destination, type Region } from './data'
 import type { CardRand, Mode } from './layouts'
 import { CAMERA } from './layouts'
 import { Spring, critical } from './physics'
@@ -48,10 +48,16 @@ export interface Ctx {
   camState: { pos: THREE.Vector3; target: THREE.Vector3 }
   cards: Card[]
   count: number
-  /** Cards passing the active filter — the count layouts space by. */
+  /** Cards in the current level (bound + visible) — the count layouts space by. */
   visibleCount: number
   mode: Mode
   busy: boolean
+  /** Drill-down depth: 1 = provinces, 2 = destinations, 3 = photo grid. */
+  level: 1 | 2 | 3
+  /** The province the user has drilled into (levels 2 & 3). */
+  region: Region | null
+  /** The destination the user has drilled into (level 3). */
+  dest: Destination | null
   detail: Card | null
   scroll: VirtualScroll
   ui: UI
@@ -112,7 +118,10 @@ export function createApp(canvas: HTMLCanvasElement, items: CardItem[]) {
   const geometry = roundedPlane(CARD_W, CARD_H, CARD_RADIUS)
   const deg = Math.PI / 180
 
-  const cards: Card[] = items.map((item, index) => {
+  // A fixed pool of meshes (sized to the largest level). Navigation rebinds the
+  // first K to the active level's items and hides the rest — see nav.ts.
+  const cards: Card[] = Array.from({ length: MAX_CARDS }, (_, index) => {
+    const item = items[index] ?? items[0]
     const mat = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       transparent: true,
@@ -121,11 +130,12 @@ export function createApp(canvas: HTMLCanvasElement, items: CardItem[]) {
     })
     const mesh = new THREE.Mesh(geometry, mat)
     mesh.userData.index = index
+    mesh.visible = index < items.length
     scene.add(mesh)
     return {
       index,
       slot: index,
-      visible: true,
+      visible: index < items.length,
       item,
       mesh,
       mat,
@@ -213,31 +223,55 @@ function fallbackTexture(item: CardItem): THREE.Texture {
   return tex
 }
 
+// Textures are loaded lazily per level and cached by URL, so re-entering a
+// visited level is instant. The content set is small, so the cache never evicts.
+const loader = new THREE.TextureLoader()
+loader.setCrossOrigin('anonymous')
+const texCache = new Map<string, THREE.Texture>()
+
+/** Load (or reuse) the texture at `url`; rejects so callers can fall back. */
+function loadTexture(renderer: THREE.WebGLRenderer, url: string): Promise<THREE.Texture> {
+  const hit = texCache.get(url)
+  if (hit) return Promise.resolve(hit)
+  return new Promise((resolve, reject) => {
+    loader.load(url, tex => {
+      tex.colorSpace = THREE.SRGBColorSpace
+      tex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy())
+      texCache.set(url, tex)
+      resolve(tex)
+    }, undefined, () => reject(new Error(`texture ${url}`)))
+  })
+}
+
+function applyTexture(card: Card, tex: THREE.Texture) {
+  card.mat.map = tex
+  card.mat.needsUpdate = true
+  card.accent = extractAccent(tex, card.item)
+}
+
+/** Point a pool mesh at a new item and load its texture (cache hit = instant). */
+export async function rebind(renderer: THREE.WebGLRenderer, card: Card, item: CardItem): Promise<void> {
+  card.item = item
+  try {
+    applyTexture(card, await loadTexture(renderer, item.textureUrl))
+  } catch {
+    applyTexture(card, fallbackTexture(item)) // tainted/failed load
+  }
+}
+
+/** Load textures for the given cards (used at boot and on each level change). */
 export function loadTextures(
   renderer: THREE.WebGLRenderer,
   cards: Card[],
   onProgress: (loaded: number, total: number) => void,
 ): Promise<void> {
-  const loader = new THREE.TextureLoader()
-  loader.setCrossOrigin('anonymous')
   let loaded = 0
   const total = cards.length
-
   const jobs = cards.map(card =>
-    new Promise<void>(resolve => {
-      const done = (tex: THREE.Texture) => {
-        tex.colorSpace = THREE.SRGBColorSpace
-        tex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy())
-        card.mat.map = tex
-        card.mat.needsUpdate = true
-        card.accent = extractAccent(tex, card.item)
-        loaded++
-        onProgress(loaded, total)
-        resolve()
-      }
-      loader.load(card.item.textureUrl, done, undefined, () => done(fallbackTexture(card.item)))
-    }),
+    loadTexture(renderer, card.item.textureUrl)
+      .then(tex => applyTexture(card, tex))
+      .catch(() => applyTexture(card, fallbackTexture(card.item)))
+      .finally(() => onProgress(++loaded, total)),
   )
-
   return Promise.all(jobs).then(() => undefined)
 }
