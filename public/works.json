@@ -1,0 +1,20 @@
+[
+  { "id": 0, "title": "Event Horizon", "eyebrow": "Title Design", "description": "A slow descent past the point of no return — typography stretched by gravity itself.", "textureUrl": "https://picsum.photos/seed/event-horizon/768/1024" },
+  { "id": 1, "title": "Monolith", "eyebrow": "Art Direction", "description": "A silent black slab in an ochre desert. The frame holds its breath.", "textureUrl": "https://picsum.photos/seed/monolith/768/1024" },
+  { "id": 2, "title": "Dune Gate", "eyebrow": "World Building", "description": "Wind-carved arches mark the threshold between two dead empires.", "textureUrl": "https://picsum.photos/seed/dune-gate/768/1024" },
+  { "id": 3, "title": "First Light", "eyebrow": "Cinematography", "description": "Dawn breaking over a terraformed ridge, captured in a single unbroken take.", "textureUrl": "https://picsum.photos/seed/first-light/768/1024" },
+  { "id": 4, "title": "Solar Drift", "eyebrow": "Motion Design", "description": "Particles of a dying star, choreographed into a four-minute ballet.", "textureUrl": "https://picsum.photos/seed/solar-drift/768/1024" },
+  { "id": 5, "title": "Black Meridian", "eyebrow": "Identity", "description": "A brand system built on longitude lines that never meet.", "textureUrl": "https://picsum.photos/seed/black-meridian/768/1024" },
+  { "id": 6, "title": "Pale Harbor", "eyebrow": "Photography", "description": "Fog rolls over an abandoned port where the ships forgot to leave.", "textureUrl": "https://picsum.photos/seed/pale-harbor/768/1024" },
+  { "id": 7, "title": "Iron Valley", "eyebrow": "Environment", "description": "Rust-colored canyons rendered down to the last oxidized grain.", "textureUrl": "https://picsum.photos/seed/iron-valley/768/1024" },
+  { "id": 8, "title": "Night Bloom", "eyebrow": "Title Design", "description": "Bioluminescent flora opening exactly once, at exactly midnight.", "textureUrl": "https://picsum.photos/seed/night-bloom/768/1024" },
+  { "id": 9, "title": "Static Fields", "eyebrow": "Installation", "description": "Two hundred CRT screens humming the same lost broadcast.", "textureUrl": "https://picsum.photos/seed/static-fields/768/1024" },
+  { "id": 10, "title": "Cold Synthesis", "eyebrow": "Sound & Vision", "description": "Analog synthesizers scored to glacier footage shot over nine winters.", "textureUrl": "https://picsum.photos/seed/cold-synthesis/768/1024" },
+  { "id": 11, "title": "Vapor Trail", "eyebrow": "Motion Design", "description": "The afterimage of a launch, dissolving frame by frame into cyan.", "textureUrl": "https://picsum.photos/seed/vapor-trail/768/1024" },
+  { "id": 12, "title": "Red Shift", "eyebrow": "Art Direction", "description": "Everything moving away from you, measured in wavelengths of longing.", "textureUrl": "https://picsum.photos/seed/red-shift/768/1024" },
+  { "id": 13, "title": "Hollow Peak", "eyebrow": "World Building", "description": "A mountain that is only surface — the inside was never written.", "textureUrl": "https://picsum.photos/seed/hollow-peak/768/1024" },
+  { "id": 14, "title": "Glass Desert", "eyebrow": "Photography", "description": "Sand fused to mirror by an event nobody documented.", "textureUrl": "https://picsum.photos/seed/glass-desert/768/1024" },
+  { "id": 15, "title": "Echo Terminal", "eyebrow": "Identity", "description": "Wayfinding for a station that answers every departure with a delay.", "textureUrl": "https://picsum.photos/seed/echo-terminal/768/1024" },
+  { "id": 16, "title": "Low Orbit", "eyebrow": "Cinematography", "description": "Ninety-minute sunrises, looped until the crew stopped counting.", "textureUrl": "https://picsum.photos/seed/low-orbit/768/1024" },
+  { "id": 17, "title": "Afterglow", "eyebrow": "Title Design", "description": "The credits roll on a world that ended quietly, and beautifully.", "textureUrl": "https://picsum.photos/seed/afterglow/768/1024" }
+]
