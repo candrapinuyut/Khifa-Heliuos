@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import gsap from 'gsap'
-import { loadItems, slug } from './data'
-import { BOUNDS, GRID, GRID_DX, GRID_DY, LAYOUTS, MODES, SCROLL_CFG } from './layouts'
+import { REGIONS, regionItems } from './data'
+import { BOUNDS, GRID, GRID_DX, GRID_DY, LAYOUTS, SCROLL_CFG } from './layouts'
 import { PanZoom } from './panzoom'
 import { Spring, critical } from './physics'
 import { createRouter } from './router'
@@ -13,39 +13,25 @@ import { createGlow } from './glow'
 import { initGyro } from './gyro'
 import { Post } from './post'
 import { Toss } from './toss'
-import { applyFilter, closeDetail, intro, openDetail, setVisibility, switchMode } from './transitions'
+import { closeDetail, intro, openDetail } from './transitions'
+import { applyRoute, back, enterDestination, enterRegion, goLevel } from './nav'
 
 const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 const canvas = document.getElementById('scene') as HTMLCanvasElement
 const worldScale = () => (window.innerWidth < 768 ? 0.7 : 1)
 
-const items = await loadItems()
-const categories = [...new Set(items.map(i => i.eyebrow))]
+// the boot set is level 1 — one card per province
+const items = regionItems()
 
 const router = createRouter({
   isBusy: () => ctx.busy,
-  hasDetail: () => !!ctx.detail,
-  openCard: i => {
-    const card = ctx.cards[i % ctx.count]
-    openDetail(ctx, card.visible ? card : ctx.cards.find(c => c.visible) ?? card)
-  },
-  closeDetail: () => closeDetail(ctx),
+  apply: route => applyRoute(ctx, route),
 })
 
-// seed the filter from the URL (?filter=identity,photography — slugged eyebrows)
-const slugToCat = new Map(categories.map(c => [slug(c), c]))
-const activeCats = new Set(
-  router.initial.filter.map(s => slugToCat.get(s)).filter((c): c is string => !!c),
-)
-
 const app = createApp(canvas, items)
-const ui = initUI(mode => switchMode(ctx, mode), reduced, {
-  categories,
-  active: activeCats,
-  onChange(active) {
-    ctx.router?.onFilter([...active].map(slug))
-    applyFilter(ctx, active)
-  },
+const ui = initUI(reduced, {
+  onBack: () => back(ctx),
+  onCrumb: level => goLevel(ctx, level),
 })
 const cursor = initCursor()
 
@@ -53,8 +39,11 @@ const ctx: Ctx = {
   ...app,
   count: items.length,
   visibleCount: items.length,
-  mode: 'flat',
+  mode: 'tilt', // level 1 opens in Tilt
   busy: true, // unlocked by intro()
+  level: 1,
+  region: null,
+  dest: null,
   detail: null,
   scroll: new VirtualScroll(reduced, canvas),
   ui,
@@ -64,14 +53,12 @@ const ctx: Ctx = {
 }
 ctx.router = router
 
-// apply the deep-linked filter before the intro — hidden cards never appear
-setVisibility(ctx, card => activeCats.size === 0 || activeCats.has(card.item.eyebrow))
-for (const c of ctx.cards) c.mesh.visible = c.visible
+ui.setCrumbs([{ label: 'Indonesia', level: 1 }])
 ui.setTotal(ctx.visibleCount)
 
 ctx.scroll.locked = true
-ctx.scroll.bounds = BOUNDS.flat(ctx.visibleCount)
-ctx.scroll.cfg = SCROLL_CFG.flat
+ctx.scroll.bounds = BOUNDS.tilt(ctx.visibleCount)
+ctx.scroll.cfg = SCROLL_CFG.tilt
 if (reduced) for (const c of ctx.cards) c.hover.c = critical(c.hover.k) // no overshoot
 
 // gallery photo-wall camera (pan + zoom); self-gates on isActive. A pointerdown
@@ -147,7 +134,12 @@ window.addEventListener('pointerup', e => {
   raycaster.setFromCamera(ndc, ctx.camera)
   const hit = raycaster.intersectObjects(meshes)
     .find(h => ctx.cards[h.object.userData.index as number].visible)
-  if (hit) openDetail(ctx, ctx.cards[hit.object.userData.index as number])
+  if (!hit) return
+  const card = ctx.cards[hit.object.userData.index as number]
+  // drill down by level: province → destinations → photos → fullscreen
+  if (ctx.level === 1) enterRegion(ctx, REGIONS[card.index])
+  else if (ctx.level === 2 && ctx.region) enterDestination(ctx, ctx.region.destinations[card.index])
+  else openDetail(ctx, card)
 })
 
 // scroll while the detail view is open closes it
@@ -188,14 +180,13 @@ function setHovered(card: Card | null) {
 
 window.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
-    if (ctx.detail && !ctx.busy) closeDetail(ctx)
+    if (!ctx.busy) back(ctx) // closes the photo, else steps up one level
     return
   }
   if (ctx.detail) return
   if (e.key === 'ArrowRight') ctx.scroll.nudge(1)
   else if (e.key === 'ArrowLeft') ctx.scroll.nudge(-1)
-  else if (/^[1-9]$/.test(e.key) && Number(e.key) <= MODES.length) switchMode(ctx, MODES[Number(e.key) - 1])
-  else if (e.key === 'Enter' && !ctx.busy) {
+  else if (e.key === 'Enter' && !ctx.busy && ctx.level === 3) {
     const card = focusCard()
     if (card) openDetail(ctx, card)
   }
@@ -210,7 +201,6 @@ window.addEventListener('resize', () => {
   ctx.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
   post.setSize()
   ctx.ws = worldScale()
-  ctx.ui.placePill()
 })
 
 // ---------- render loop ----------
@@ -438,7 +428,8 @@ gsap.ticker.add(frame)
 const loader = document.getElementById('loader')!
 const loaderText = document.getElementById('loader-text')!
 
-loadTextures(ctx.renderer, ctx.cards, (loaded, total) => {
+// boot loads only the level-1 province covers; deeper levels load lazily on drill-in
+loadTextures(ctx.renderer, ctx.cards.filter(c => c.visible), (loaded, total) => {
   loaderText.textContent = `Loading ${loaded} / ${total}`
 }).then(() => {
   gsap.to(loader, {
@@ -449,10 +440,7 @@ loadTextures(ctx.renderer, ctx.cards, (loaded, total) => {
   })
   intro(ctx)
 
-  // deep links: ?mode=ring&card=4 jump there after the intro settles
-  const { mode, card } = ctx.router!.initial
-  if (mode) gsap.delayedCall(2.4, () => switchMode(ctx, mode))
-  if (card !== null) {
-    gsap.delayedCall(mode ? 4.6 : 2.4, () => openDetail(ctx, ctx.cards[card % ctx.count]))
-  }
+  // deep link (?region=bali&dest=kuta&photo=2): walk to it once the intro settles
+  const r = ctx.router!.initial
+  if (r.region) gsap.delayedCall(reduced ? 0.6 : 2.4, () => applyRoute(ctx, r))
 })

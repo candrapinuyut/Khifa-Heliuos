@@ -1,12 +1,11 @@
 import * as THREE from 'three'
 import gsap from 'gsap'
-import { BOUNDS, CAMERA, LAYOUTS, SCROLL_CFG, nearestAngle, type Mode } from './layouts'
-import { springEase } from './physics'
+import { CAMERA, LAYOUTS, nearestAngle, type Mode } from './layouts'
 import { CARD_H, CARD_W, type Card, type Ctx } from './scene'
 
 const UP = new THREE.Vector3(0, 1, 0)
 
-function killCardTweens(ctx: Ctx) {
+export function killCardTweens(ctx: Ctx) {
   ctx.modeTl?.kill()
   ctx.modeTl = null
   ctx.cards.forEach(c => gsap.killTweensOf(c.state))
@@ -14,7 +13,7 @@ function killCardTweens(ctx: Ctx) {
   gsap.killTweensOf(ctx.camState.target)
 }
 
-function tweenCamera(
+export function tweenCamera(
   tl: gsap.core.Timeline,
   ctx: Ctx,
   mode: Mode,
@@ -26,82 +25,43 @@ function tweenCamera(
   tl.to(ctx.camState.target, { x: cam.target[0], y: cam.target[1], z: cam.target[2], duration, ease }, 0)
 }
 
-/** FLIP-style mode switch: every mesh tweens from its current transform to the
- *  new layout's target — nothing snaps, nothing is remounted. */
-export function switchMode(ctx: Ctx, mode: Mode) {
-  if (ctx.detail || ctx.mode === mode) return
-  killCardTweens(ctx)
-
-  ctx.mode = mode
-  ctx.ui.setMode(mode)
-  ctx.router?.onMode(mode)
-  ctx.busy = true
-  ctx.scroll.locked = true
-
-  // Rebase the scroll offset into [0, count) so layouts with clamped bounds
-  // (tilt/gallery) land somewhere sensible and wrap modes don't jump.
-  // Tilt always opens on the middle card so the row reads centered.
-  const count = ctx.visibleCount
-  const rebased = mode === 'tilt'
-    ? Math.round((count - 1) / 2)
-    : ((ctx.scroll.current % count) + count) % count
-  ctx.scroll.rebase(rebased)
-  ctx.scroll.bounds = BOUNDS[mode](count)
-  ctx.scroll.cfg = SCROLL_CFG[mode]
-  ctx.scroll.disabled = mode === 'gallery' // panzoom owns gallery input
-
-  const dur = ctx.reduced ? 0.3 : 1.2
-  // physical settle: fast attack with a hint of overshoot instead of a symmetric ease
-  const ease = ctx.reduced ? 'none' : springEase(120, 19, dur)
-
-  const tl = gsap.timeline({
-    onComplete() {
-      ctx.busy = false
-      ctx.scroll.locked = false
-      ctx.modeTl = null
-    },
-  })
-
+/** Fling every visible card (except `keep`) radially off-screen and fade it out.
+ *  Shared by the detail view (keeps the hero) and the level swap (keeps nothing). */
+export function scatterOut(ctx: Ctx, tl: gsap.core.Timeline, dur: number, keep?: Card | null) {
+  let n = 0
   ctx.cards.forEach(card => {
-    if (!card.visible) return
-    const pose = LAYOUTS[mode](card.slot, count, rebased, card.rand, ctx.ws)
+    if (card === keep || !card.visible) return
     const st = card.state
-    const at = ctx.reduced ? 0 : card.slot * 0.03
-
+    // view-relative so the scatter exits the screen even from a panned/zoomed camera
+    const dx = st.px - ctx.camState.pos.x
+    const dy = st.py - ctx.camState.pos.y
+    const len = Math.hypot(dx, dy)
+    const ang = len < 0.3 ? card.rand.dir : Math.atan2(dy, dx)
     tl.to(st, {
-      px: pose.p[0], py: pose.p[1], pz: pose.p[2],
-      rx: nearestAngle(st.rx, pose.r[0]),
-      ry: nearestAngle(st.ry, pose.r[1]),
-      rz: nearestAngle(st.rz, pose.r[2]),
-      s: pose.s,
-      b: pose.b,
-      duration: dur,
-      ease,
-    }, at)
+      px: st.px + Math.cos(ang) * 16,
+      py: st.py + Math.sin(ang) * 11,
+      o: 0,
+      duration: dur * 0.8,
+      ease: ctx.reduced ? 'none' : 'power3.in',
+    }, ctx.reduced ? 0 : n * 0.02)
+    n++
   })
-
-  tweenCamera(tl, ctx, mode, dur, ease)
-  ctx.modeTl = tl
 }
 
-/** Page-load reveal: cards scale/fade in from the center into the Flat wheel. */
-export function intro(ctx: Ctx) {
-  ctx.busy = true
-  ctx.scroll.locked = true
-
-  const dur = ctx.reduced ? 0.3 : 1.1
-  const ease = ctx.reduced ? 'none' : 'power3.out'
-  const tl = gsap.timeline({
-    onComplete() {
-      ctx.busy = false
-      ctx.scroll.locked = false
-      ctx.modeTl = null
-    },
-  })
-
+/** Scale/fade every visible card in from near the center into `mode`'s layout,
+ *  staggered by slot. Shared by the page-load intro and the level swap. */
+export function flyIn(
+  ctx: Ctx,
+  tl: gsap.core.Timeline,
+  mode: Mode,
+  scroll: number,
+  dur: number,
+  ease: string | ((t: number) => number),
+  at0 = 0,
+) {
   ctx.cards.forEach(card => {
     if (!card.visible) return
-    const pose = LAYOUTS.flat(card.slot, ctx.visibleCount, 0, card.rand, ctx.ws)
+    const pose = LAYOUTS[mode](card.slot, ctx.visibleCount, scroll, card.rand, ctx.ws)
     const st = card.state
     Object.assign(st, {
       px: pose.p[0] * 0.35, py: pose.p[1] * 0.35, pz: -2,
@@ -113,9 +73,31 @@ export function intro(ctx: Ctx) {
       s: pose.s, o: 1,
       duration: dur,
       ease,
-    }, ctx.reduced ? 0 : card.slot * 0.045)
+    }, at0 + (ctx.reduced ? 0 : card.slot * 0.045))
+  })
+}
+
+/** Page-load reveal: cards scale/fade in from the center into the active mode. */
+export function intro(ctx: Ctx) {
+  ctx.busy = true
+  ctx.scroll.locked = true
+
+  // snap the camera to the active mode so the first frame is already framed
+  const cam = CAMERA[ctx.mode]
+  ctx.camState.pos.set(...cam.pos)
+  ctx.camState.target.set(...cam.target)
+
+  const dur = ctx.reduced ? 0.3 : 1.1
+  const ease = ctx.reduced ? 'none' : 'power3.out'
+  const tl = gsap.timeline({
+    onComplete() {
+      ctx.busy = false
+      ctx.scroll.locked = false
+      ctx.modeTl = null
+    },
   })
 
+  flyIn(ctx, tl, ctx.mode, 0, dur, ease)
   ctx.modeTl = tl
 }
 
@@ -153,25 +135,8 @@ export function openDetail(ctx: Ctx, card: Card) {
 
   ctx.ui.hideChrome()
 
-  // other cards scatter radially off-screen and fade
-  let n = 0
-  ctx.cards.forEach(other => {
-    if (other === card || !other.visible) return
-    const st = other.state
-    // view-relative so the scatter exits the screen even from a panned/zoomed camera
-    const dx = st.px - ctx.camState.pos.x
-    const dy = st.py - ctx.camState.pos.y
-    const len = Math.hypot(dx, dy)
-    const ang = len < 0.3 ? other.rand.dir : Math.atan2(dy, dx)
-    tl.to(st, {
-      px: st.px + Math.cos(ang) * 16,
-      py: st.py + Math.sin(ang) * 11,
-      o: 0,
-      duration: dur * 0.8,
-      ease: ctx.reduced ? 'none' : 'power3.in',
-    }, ctx.reduced ? 0 : n * 0.02)
-    n++
-  })
+  // other cards scatter radially off-screen and fade; the hero is kept
+  scatterOut(ctx, tl, dur, card)
 
   // hero flies to the camera and covers the viewport
   tl.to(hst, {
@@ -244,62 +209,3 @@ export function setVisibility(ctx: Ctx, show: (card: Card) => boolean): number {
   return slot
 }
 
-/** Animated filter (cats = selected eyebrows; empty = all): hidden cards sink away,
- *  the survivors FLIP into the re-spaced layout — the same busy-locked timeline
- *  shape as switchMode. */
-export function applyFilter(ctx: Ctx, cats: ReadonlySet<string>) {
-  if (ctx.detail) return
-  killCardTweens(ctx)
-
-  setVisibility(ctx, card => cats.size === 0 || cats.has(card.item.eyebrow))
-  ctx.ui.setTotal(ctx.visibleCount)
-
-  ctx.busy = true
-  ctx.scroll.locked = true
-  const count = Math.max(1, ctx.visibleCount)
-  const rebased = ctx.mode === 'tilt'
-    ? Math.round((count - 1) / 2)
-    : ((ctx.scroll.current % count) + count) % count
-  ctx.scroll.rebase(rebased)
-  ctx.scroll.bounds = BOUNDS[ctx.mode](count)
-
-  const dur = ctx.reduced ? 0.3 : 1.0
-  const ease = ctx.reduced ? 'none' : springEase(120, 19, dur)
-
-  const tl = gsap.timeline({
-    onComplete() {
-      ctx.busy = false
-      ctx.scroll.locked = false
-      ctx.modeTl = null
-    },
-  })
-
-  ctx.cards.forEach(card => {
-    const st = card.state
-    if (card.visible) {
-      card.mesh.visible = true
-      const pose = LAYOUTS[ctx.mode](card.slot, count, rebased, card.rand, ctx.ws)
-      tl.to(st, {
-        px: pose.p[0], py: pose.p[1], pz: pose.p[2],
-        rx: nearestAngle(st.rx, pose.r[0]),
-        ry: nearestAngle(st.ry, pose.r[1]),
-        rz: nearestAngle(st.rz, pose.r[2]),
-        s: pose.s, b: pose.b, o: 1,
-        duration: dur,
-        ease,
-      }, ctx.reduced ? 0 : card.slot * 0.03)
-    } else if (card.mesh.visible) {
-      // sink and fade out, then drop from the render list entirely
-      tl.to(st, {
-        py: st.py - 2.2,
-        s: Math.max(st.s * 0.6, 0.0001),
-        o: 0,
-        duration: dur * 0.55,
-        ease: ctx.reduced ? 'none' : 'power3.in',
-        onComplete: () => { card.mesh.visible = false },
-      }, 0)
-    }
-  })
-
-  ctx.modeTl = tl
-}

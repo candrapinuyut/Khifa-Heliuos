@@ -1,40 +1,43 @@
 import gsap from 'gsap'
-import { MODES, type Mode } from './layouts'
+import type { Route } from './nav'
 
-/** URL ⇄ scene sync. Mode switches replace the entry (no back-button spam);
- *  opening a card pushes one entry so the browser Back button closes it. */
+/** URL ⇄ scene sync for the drill-down. Each level push (province → destination →
+ *  photo) adds a history entry, so the browser Back button walks back out. */
 export interface Router {
-  /** Reflect a completed mode switch in the URL. */
-  onMode(mode: Mode): void
-  /** Reflect a detail open in the URL (card = scene index). */
+  /** Reflect a completed level navigation in the URL (slugs; null = up a level). */
+  commit(region: string | null, dest: string | null): void
+  /** Reflect opening the fullscreen photo (index into the destination gallery). */
   onDetailOpen(index: number): void
-  /** Reflect a detail close in the URL. */
+  /** Reflect closing the fullscreen photo. */
   onDetailClose(): void
-  /** Reflect the active filter in the URL (slugged eyebrows; empty = all). */
-  onFilter(slugs: string[]): void
-  /** Deep-link params read at boot. */
-  initial: { mode: Mode | null; card: number | null; filter: string[] }
+  /** Deep-link route read at boot. */
+  initial: Route
 }
 
 interface RouterHooks {
   isBusy(): boolean
-  hasDetail(): boolean
-  openCard(index: number): void
-  closeDetail(): void
+  /** Reconcile the scene to a parsed URL route (popstate / deep link). */
+  apply(route: Route): void
 }
 
-const cardParam = (): number | null => {
-  const v = new URLSearchParams(location.search).get('card')
-  const n = Number(v)
-  return v === null || v === '' || !Number.isFinite(n) ? null : Math.abs(Math.trunc(n))
+function parse(): Route {
+  const p = new URLSearchParams(location.search)
+  const region = p.get('region')
+  const dest = p.get('dest')
+  const photoRaw = p.get('photo')
+  const photoNum = Number(photoRaw)
+  const photo = photoRaw === null || photoRaw === '' || !Number.isFinite(photoNum)
+    ? null
+    : Math.abs(Math.trunc(photoNum))
+  return { region: region || null, dest: region ? dest || null : null, photo }
 }
 
-function setParams(mutate: (p: URLSearchParams) => void, push: boolean) {
+function write(mutate: (p: URLSearchParams) => void, push: boolean) {
   const p = new URLSearchParams(location.search)
   mutate(p)
   const q = p.toString()
   const url = q ? `?${q}` : location.pathname
-  if (push) history.pushState({ card: true }, '', url)
+  if (push) history.pushState({}, '', url)
   else history.replaceState(history.state, '', url)
 }
 
@@ -45,39 +48,26 @@ export function createRouter(hooks: RouterHooks): Router {
       gsap.delayedCall(0.12, sync)
       return
     }
-    const id = cardParam()
-    if (id !== null && !hooks.hasDetail()) hooks.openCard(id)
-    else if (id === null && hooks.hasDetail()) hooks.closeDetail()
+    hooks.apply(parse())
   }
   window.addEventListener('popstate', sync)
 
-  const m0 = new URLSearchParams(location.search).get('mode') as Mode | null
-
-  const f0 = new URLSearchParams(location.search).get('filter')
-
   return {
-    initial: {
-      mode: m0 && MODES.includes(m0) ? m0 : null,
-      card: cardParam(),
-      filter: f0 ? f0.split(',').filter(Boolean) : [],
-    },
-    onMode(mode) {
-      setParams(p => p.set('mode', mode), false)
-    },
-    onFilter(slugs) {
-      setParams(p => (slugs.length ? p.set('filter', slugs.join(',')) : p.delete('filter')), false)
+    initial: parse(),
+    commit(region, dest) {
+      write(p => {
+        region ? p.set('region', region) : p.delete('region')
+        dest ? p.set('dest', dest) : p.delete('dest')
+        p.delete('photo') // a level change always leaves the fullscreen view
+      }, true)
     },
     onDetailOpen(index) {
-      const cur = cardParam()
-      if (cur === index) return // URL already says so (popstate/deep link drove this)
-      // push only when adding the param; a deep link with an out-of-range card
-      // just gets normalized in place
-      setParams(p => p.set('card', String(index)), cur === null)
+      if (parse().photo === index) return // popstate/deep link already drove this
+      write(p => p.set('photo', String(index)), true)
     },
     onDetailClose() {
-      if (cardParam() === null) return // Back button drove this close — URL is done
-      if (history.state?.card) history.back()
-      else setParams(p => p.delete('card'), false)
+      if (parse().photo === null) return // Back button drove this close — URL is done
+      write(p => p.delete('photo'), false)
     },
   }
 }

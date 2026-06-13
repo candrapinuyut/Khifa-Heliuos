@@ -57,45 +57,43 @@ html, body {
   color: var(--muted);
 }
 
-#seg {
-  top: 18px;
+/* ---------- breadcrumb ---------- */
+
+#crumbs {
+  top: 20px;
   right: 24px;
   display: flex;
-  gap: 2px;
-  padding: 3px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(8px);
+  align-items: center;
+  gap: 6px;
+  max-width: min(60vw, 520px);
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
-#seg button {
-  position: relative;
-  z-index: 1;
+.crumb {
   appearance: none;
   border: 0;
   background: none;
-  padding: 7px 14px;
-  border-radius: 999px;
+  padding: 0;
   font-family: var(--font);
   font-size: 11px;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.42);
-  transition: color 0.35s ease;
+  transition: color 0.3s ease;
+  white-space: nowrap;
 }
 
-#seg button.active { color: #0a0a0c; }
+.crumb:not(.current):hover { color: rgba(255, 255, 255, 0.75); }
 
-#seg-pill {
-  position: absolute;
-  top: 3px;
-  bottom: 3px;
-  left: 0;
-  width: 60px;
-  border-radius: 999px;
-  background: #f2f2f2;
-  will-change: transform, width;
+.crumb.current {
+  color: #f4f4f5;
+  font-weight: 600;
+}
+
+.crumb-sep {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.28);
 }
 
 .chrome-bl {
@@ -150,82 +148,32 @@ html, body {
   will-change: transform, opacity;
 }
 
+/* ---------- back button ---------- */
+
 .chrome-rc {
   top: 50%;
   right: 22px;
   transform: translateY(-50%);
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 14px 0 11px;
+  border-radius: 999px;
   border: 1px solid #2a2a2e;
   background: rgba(255, 255, 255, 0.04);
-  color: #999;
-  display: grid;
-  place-items: center;
+  backdrop-filter: blur(8px);
+  color: #bbb;
   appearance: none;
-  padding: 0;
-}
-
-#filter-btn.on::after {
-  content: "";
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #f2f2f2;
-}
-
-/* ---------- filter panel ---------- */
-
-#filter-panel {
-  position: fixed;
-  z-index: 11;
-  top: 50%;
-  right: 70px;
-  transform: translateY(-50%) translateX(8px);
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-  padding: 10px;
-  border-radius: 14px;
-  background: rgba(16, 16, 19, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(10px);
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition: opacity 0.25s ease, transform 0.25s ease, visibility 0.25s;
-}
-
-#filter-panel.open {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-  transform: translateY(-50%) translateX(0);
-}
-
-#filter-panel .chip {
-  appearance: none;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 999px;
-  background: none;
-  padding: 6px 12px;
   font-family: var(--font);
   font-size: 10px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.45);
-  transition: color 0.25s ease, background 0.25s ease, border-color 0.25s ease;
+  transition: color 0.3s ease, border-color 0.3s ease;
 }
 
-#filter-panel .chip.on {
-  background: #f2f2f2;
-  border-color: #f2f2f2;
-  color: #0a0a0c;
-}
+.chrome-rc:hover { color: #f2f2f2; border-color: #555; }
+.chrome-rc[hidden] { display: none; }
 
 /* ---------- detail view ---------- */
 
@@ -335,44 +283,11 @@ html, body {
 
 /* ---------- responsive ---------- */
 
-/* 7 modes no longer fit inline: collapse the seg to the active mode + chevron,
-   expanding into a vertical list on tap (handled in ui.ts) */
-@media (max-width: 899px) {
-  #seg {
-    flex-direction: column;
-    align-items: stretch;
-    border-radius: 18px;
-  }
-  #seg-pill { display: none; }
-  #seg button {
-    text-align: left;
-    padding-right: 28px;
-  }
-  #seg:not(.open) button:not(.active) { display: none; }
-  #seg button.active { color: #f2f2f2; }
-  #seg.open button.active {
-    color: #0a0a0c;
-    background: #f2f2f2;
-  }
-  #seg::after {
-    content: "";
-    position: absolute;
-    right: 11px;
-    top: 14px;
-    border: 4px solid transparent;
-    border-top-color: #888;
-    pointer-events: none;
-  }
-  #seg.open::after { display: none; }
-}
-
 @media (max-width: 768px) {
   .chrome-tl { top: 18px; left: 16px; }
-  #seg { top: 44px; right: 50%; transform: translateX(50%); }
-  #seg button { padding: 6px 28px 6px 11px; font-size: 10px; }
+  #crumbs { top: 44px; right: 16px; left: 16px; max-width: none; }
   .chrome-bl { bottom: 16px; left: 16px; }
   .chrome-br { bottom: 20px; right: 16px; }
-  .chrome-rc { display: none; }
-  #filter-panel { display: none; }
+  .chrome-rc { top: auto; bottom: 18px; right: 50%; transform: translateX(50%); }
   .detail-content { left: 7vw; bottom: 9vh; right: 7vw; }
 }

@@ -1,31 +1,34 @@
 import gsap from 'gsap'
-import type { Mode } from './layouts'
 import type { CardItem } from './data'
 
+export interface Crumb {
+  label: string
+  level: 1 | 2 | 3
+}
+
 export interface UI {
-  setMode(mode: Mode): void
+  /** Render the breadcrumb trail (and show/hide the Back button accordingly). */
+  setCrumbs(parts: Crumb[]): void
   setCounter(n: number): void
-  /** The "— NN" tail of the counter (total visible cards). */
+  /** The "— NN" tail of the counter (total cards in the current level). */
   setTotal(n: number): void
   showChrome(): void
   hideChrome(): void
   fillDetail(item: CardItem): void
   showDetail(): gsap.core.Tween
   hideDetail(): gsap.core.Tween
-  placePill(): void
 }
 
-export interface FilterOpts {
-  categories: string[]
-  /** Selected categories (mutated in place); empty = show all. */
-  active: Set<string>
-  onChange(active: ReadonlySet<string>): void
+export interface NavHooks {
+  /** Up one level (Back button). */
+  onBack(): void
+  /** Jump to a shallower level (breadcrumb click). */
+  onCrumb(level: 1 | 2 | 3): void
 }
 
-export function initUI(onMode: (mode: Mode) => void, reduced: boolean, filter: FilterOpts): UI {
-  const seg = document.getElementById('seg')!
-  const pill = document.getElementById('seg-pill')!
-  const buttons = Array.from(seg.querySelectorAll<HTMLButtonElement>('button[data-mode]'))
+export function initUI(reduced: boolean, hooks: NavHooks): UI {
+  const crumbsEl = document.getElementById('crumbs')!
+  const backBtn = document.getElementById('back')!
   const counterNum = document.getElementById('counter-num')!
   const detail = document.getElementById('detail')!
   const detailEls = Array.from(detail.querySelectorAll<HTMLElement>('.detail-el, #detail-close'))
@@ -36,111 +39,47 @@ export function initUI(onMode: (mode: Mode) => void, reduced: boolean, filter: F
   const counterBox = document.querySelector<HTMLElement>('.chrome-br')!
   const counterRest = document.querySelector<HTMLElement>('.counter-rest')!
   const hintEl = document.querySelector<HTMLElement>('.hint')!
-  const filterBtn = document.getElementById('filter-btn')!
-  const panel = document.getElementById('filter-panel')!
 
-  let activeMode: Mode = 'flat'
   let counterValue = 1
-  let counterSuppressed = false // modes with no "current card" hide the counter
+  let counterSuppressed = false // the photo grid (level 3) has no "current card"
 
-  // modes where a single "current card" doesn't exist, plus their drag hints
-  const NO_COUNTER: Mode[] = ['gallery', 'phyllo']
-  const HINTS: Partial<Record<Mode, string>> = {
-    gallery: 'Drag to pan — scroll to zoom',
-    phyllo: 'Drag to spin',
-    helix: 'Drag up — climb the spiral',
-  }
+  backBtn.addEventListener('click', () => hooks.onBack())
 
-  function placePill() {
-    const btn = buttons.find(b => b.dataset.mode === activeMode)
-    if (!btn) return
-    gsap.to(pill, {
-      x: btn.offsetLeft,
-      width: btn.offsetWidth,
-      duration: reduced ? 0 : 0.4,
-      ease: 'power3.inOut',
-      overwrite: true,
+  function setCrumbs(parts: Crumb[]) {
+    crumbsEl.replaceChildren()
+    parts.forEach((p, i) => {
+      if (i > 0) {
+        const sep = document.createElement('span')
+        sep.className = 'crumb-sep'
+        sep.textContent = '›'
+        sep.setAttribute('aria-hidden', 'true')
+        crumbsEl.appendChild(sep)
+      }
+      const last = i === parts.length - 1
+      const b = document.createElement('button')
+      b.type = 'button'
+      b.className = 'crumb'
+      b.textContent = p.label
+      if (last) {
+        b.classList.add('current')
+        b.setAttribute('aria-current', 'page')
+      } else {
+        b.setAttribute('data-hot', '')
+        b.addEventListener('click', () => hooks.onCrumb(p.level))
+      }
+      crumbsEl.appendChild(b)
     })
-  }
 
-  function setMode(mode: Mode) {
-    activeMode = mode
-    buttons.forEach(b => b.classList.toggle('active', b.dataset.mode === mode))
-    placePill()
-    const suppress = NO_COUNTER.includes(mode)
+    const deepest = parts[parts.length - 1]?.level ?? 1
+    backBtn.toggleAttribute('hidden', parts.length <= 1)
+    hintEl.textContent = deepest === 3 ? 'Drag to pan · scroll to zoom' : 'Scroll to explore'
+
+    const suppress = deepest === 3
     if (suppress !== counterSuppressed) {
       counterSuppressed = suppress
       gsap.to(counterBox, { autoAlpha: suppress ? 0 : 1, duration: reduced ? 0 : 0.4, ease: 'power2.out', overwrite: true })
     }
-    hintEl.textContent = HINTS[mode] ?? 'Scroll to explore'
   }
-
-  // below the collapse breakpoint the seg shows only the active mode; the first
-  // tap expands the full list, the next one picks a mode and collapses it again
-  const segCollapsed = window.matchMedia('(max-width: 899px)')
-  buttons.forEach(b => b.addEventListener('click', () => {
-    if (segCollapsed.matches && !seg.classList.contains('open')) {
-      seg.classList.add('open')
-      return
-    }
-    seg.classList.remove('open')
-    onMode(b.dataset.mode as Mode)
-  }))
-  window.addEventListener('pointerdown', e => {
-    if (seg.classList.contains('open') && !(e.target as HTMLElement).closest?.('#seg')) {
-      seg.classList.remove('open')
-    }
-  })
-
-  // initial pill placement (no animation)
-  const initial = buttons.find(b => b.classList.contains('active'))
-  if (initial) gsap.set(pill, { x: initial.offsetLeft, width: initial.offsetWidth })
-
-  // ----- filter panel: an "All" chip + one multi-select chip per category -----
-
-  const chips: HTMLButtonElement[] = []
-
-  function syncChips() {
-    const none = filter.active.size === 0
-    chips.forEach(c => {
-      const cat = c.dataset.cat
-      c.classList.toggle('on', cat ? filter.active.has(cat) : none)
-    })
-    filterBtn.classList.toggle('on', !none)
-  }
-
-  function chip(label: string, cat?: string) {
-    const b = document.createElement('button')
-    b.type = 'button'
-    b.className = 'chip'
-    b.textContent = label
-    b.setAttribute('data-hot', '')
-    if (cat) b.dataset.cat = cat
-    b.addEventListener('click', () => {
-      if (!cat) filter.active.clear()
-      else if (filter.active.has(cat)) filter.active.delete(cat)
-      else filter.active.add(cat)
-      syncChips()
-      filter.onChange(filter.active)
-    })
-    panel.appendChild(b)
-    chips.push(b)
-  }
-
-  chip('All')
-  filter.categories.forEach(c => chip(c, c))
-  syncChips()
-
-  let panelOpen = false
-  function setPanel(open: boolean) {
-    panelOpen = open
-    panel.classList.toggle('open', open)
-    panel.setAttribute('aria-hidden', String(!open))
-  }
-  filterBtn.addEventListener('click', () => setPanel(!panelOpen))
-  window.addEventListener('pointerdown', e => {
-    if (panelOpen && !(e.target as HTMLElement).closest?.('#filter-panel, #filter-btn')) setPanel(false)
-  })
 
   function setCounter(n: number) {
     if (n === counterValue) return
@@ -159,14 +98,13 @@ export function initUI(onMode: (mode: Mode) => void, reduced: boolean, filter: F
   const chrome = () => gsap.utils.toArray<HTMLElement>('.chrome')
 
   return {
-    setMode,
+    setCrumbs,
     setCounter,
     setTotal(n: number) {
-      counterRest.textContent = ` — ${String(n).padStart(2, '0')}`
+      counterRest.textContent = ` — ${String(n).padStart(2, '0')}`
     },
-    placePill,
     showChrome() {
-      // keep the counter hidden in gallery — don't resurrect it on detail close
+      // keep the counter hidden on the photo grid — don't resurrect it on detail close
       const targets = counterSuppressed ? chrome().filter(el => el !== counterBox) : chrome()
       gsap.to(targets, { autoAlpha: 1, duration: reduced ? 0.2 : 0.5, ease: 'power2.out', overwrite: true })
     },
